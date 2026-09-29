@@ -12,32 +12,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""First ROS 2 node: logs a heartbeat from a timer."""
+"""First ROS 2 node: publishes a heartbeat string on a timer."""
 
 import rclpy
 from rclpy._rclpy_pybind11 import RCLError
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from std_msgs.msg import String
+
+HEARTBEAT_TOPIC = 'heartbeat'
 
 
 class FirstRobotNode(Node):
-    """A minimal node that logs a counter on a fixed-rate timer."""
+    """A node that publishes a counter and logs it on a fixed-rate timer."""
 
     def __init__(self) -> None:
-        """Create the node and start the heartbeat timer."""
+        """Create the publisher and start the heartbeat timer."""
         super().__init__('first_robot_node')
         self.declare_parameter('rate_hz', 1.0)
         self._rate_hz = float(self.get_parameter('rate_hz').value)
         self._count = 0
+        self._publisher = self.create_publisher(
+            String, HEARTBEAT_TOPIC, 10
+        )
         self.get_logger().info(
-            f'first_robot_node started at {self._rate_hz} Hz'
+            f'first_robot_node publishing on /{HEARTBEAT_TOPIC} '
+            f'at {self._rate_hz} Hz'
         )
         self._timer = self.create_timer(1.0 / self._rate_hz, self._on_timer)
 
     def _on_timer(self) -> None:
-        """Log one heartbeat. Called by the executor on each timer expiry."""
+        """Publish one heartbeat. Called by the executor on each expiry."""
         self._count += 1
-        self.get_logger().info(f'heartbeat {self._count}')
+        msg = String()
+        msg.data = f'heartbeat {self._count}'
+        self._publisher.publish(msg)
+        self.get_logger().info(msg.data)
 
 
 def main(args: list[str] | None = None) -> None:
