@@ -7,6 +7,7 @@ ROS 2, C++, Python, Gazebo. Workspace: ros2_ws/. Each project lives in ros2_ws/s
 3. After approval, delegate coding to @implementer, then have @reviewer check it.
 4. Commit after each approved task.
 5. At the end of a task, append to <project>/docs/progress.md: done, decisions, next step.
+6. After a task is committed, ask @professor to write a lesson to <project>/docs/lessons/.
 
 ## Rules
 - Never overwrite progress.md or decisions.md; append only.
