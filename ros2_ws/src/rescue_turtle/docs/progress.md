@@ -40,3 +40,25 @@
 - Human visual check of the rescue, then commit. Phase 2 is the autonomous
   `rescuer` node (SEEK -> RESCUE -> RETURN), which takes the same rescuer name
   parameter.
+
+## 2026-10-01 — Renamed "phase" to "version"
+- Done: terminology changed across `README.md`, `AGENTS.md`, `docs/spec.md`,
+  `docs/lessons/2026-09-30-version-1-manual-rescue.md` (renamed from
+  `2026-09-30-phase-1-manual-rescue.md`) and one docstring in `rescue_pair.py`.
+  No behaviour changed; no node, topic, service or parameter was touched.
+- The entries above keep the word "Phase" as written on the day they were
+  recorded. They are history, not current terminology.
+
+### Decisions
+- The term is "version", not "phase". The reason given is that changing what is
+  already shipped should read as `1.1`, and "phase 1.1" reads as a contradiction
+  where "version 1.1" does not. The numbering therefore means: `1` is the first
+  shipped state, `1.1` and `1.2` are changes to it, `2` is the next major
+  version. Added to `README.md` so the convention is written down rather than
+  assumed.
+- This project had no `1.1` yet, so nothing was renamed inside the numbers. The
+  Version 1 changes the author now has in mind become `1.1`.
+
+### Next step
+- Start Version 1.1. The human visual check of Version 1 is still the open item
+  from the entry above.

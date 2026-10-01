@@ -78,7 +78,7 @@ class RescuePair:
     """
     One rescue pair: a rescuer turtle name and a victim turtle name.
 
-    Every topic and service name the two Phase 1 nodes use is derived from this
+    Every topic and service name the two Version 1 nodes use is derived from this
     pair, so running the same executables with a different pair needs no code
     change. Instances are frozen and validated at construction, which turns a
     mistyped or self-referential pair into a clear ``ValueError`` instead of a

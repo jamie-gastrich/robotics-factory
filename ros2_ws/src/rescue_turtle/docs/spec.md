@@ -3,7 +3,7 @@
 ## Goal
 Built on stock turtlesim. Turtle1 rescues turtle2 and brings it back to the start zone. Logic prototype for a later Gazebo version.
 
-## Phase 1: Manual driving, automatic game logic
+## Version 1: Manual driving, automatic game logic
 - Keyboard: existing turtle_teleop_key.
 - A rescue is identified by a (rescuer name, victim name) pair, both
   parameters. `turtle1`/`turtle2` are defaults, not fixed roles.
@@ -18,13 +18,13 @@ Built on stock turtlesim. Turtle1 rescues turtle2 and brings it back to the star
 - Parameters: attach_distance, start_zone bounds, rescue color, turtle names,
   topic/service names.
 
-## Phase 2: Autonomous
+## Version 2: Autonomous
 - rescuer node: SEEK -> RESCUE -> RETURN via Twist on /<rescuer>/cmd_vel; must
   reach the exact start position. Takes the same rescuer name parameter.
 
-## Phase 3: Fleet
+## Version 3: Fleet
 - Several autonomous rescuer turtles plus a dispatcher that assigns victims to
-  rescuers. Phase 1 and 2 code is written so this needs no rewrite: names are
+  rescuers. Version 1 and 2 code is written so this needs no rewrite: names are
   parameters, logic is in per-pair classes, and the same executables already
   run side by side.
 - Gazebo port remains a later, separate project.
@@ -38,7 +38,7 @@ Built on stock turtlesim. Turtle1 rescues turtle2 and brings it back to the star
 - Timeout that fails a rescue?
 - Score counter (topic or log)?
 
-## Phase 1 Plan
+## Version 1 Plan
 
 Verified against the installed turtlesim 1.10.9 (distro `lyrical`) before writing
 this plan. Facts that constrain the design:
@@ -60,10 +60,10 @@ this plan. Facts that constrain the design:
   `/spawn` with `name: 'turtle2'` returns `turtle2`, and
   `/turtle2/teleport_absolute` moves turtle2's published pose.
 
-### Phase 3 constraints applied now
+### Version 3 constraints applied now
 
-Phase 3 is a fleet of autonomous rescuer turtles plus a dispatcher. Phase 1
-builds none of that, but the Phase 1 code must not need rewriting to get there.
+Version 3 is a fleet of autonomous rescuer turtles plus a dispatcher. Version 1
+builds none of that, but the Version 1 code must not need rewriting to get there.
 Four constraints, applied to everything below:
 
 1. **No hard-coded turtle names.** `turtle1` and `turtle2` appear only as
@@ -90,13 +90,13 @@ than solved problems:
   names are absolute (`/{name}/pose`), which is what turtlesim publishes, so
   pushing a node into a namespace does not redirect them. Two instances run side
   by side only if they are given different `rescuer_name`/`victim_name` values.
-  This is the correct Phase 1 shape and is also how the fleet will work, but it
-  is not namespace-based multi-tenancy and is not claimed to be.
+  This is the correct Version 1 shape and is also how the fleet will work, but
+  it is not namespace-based multi-tenancy and is not claimed to be.
 - **The background colour is global.** `/turtlesim` has exactly one
   `background_r/g/b` triple, so two managers running at once would overwrite
   each other's colour. Left as-is deliberately: fixing it means a fleet-wide
-  colour policy, which is a Phase 3 decision. Phase 1 uses it as a single-pair
-  visual signal.
+  colour policy, which is a Version 3 decision. Version 1 uses it as a
+  single-pair visual signal.
 
 ### Files to create
 
@@ -371,7 +371,7 @@ rescue and back to white on success, and the victim visibly tracks the rescuer.
 Steps 7-9 prove the mechanism that causes it; the colour checks are done by
 reading the parameters back, not by looking.
 
-**Out of scope for Phase 1:** the rescuer node, rescue timeouts, the score
+**Out of scope for Version 1:** the rescuer node, rescue timeouts, the score
 counter, and anything in the Open questions section.
 
 **Also out of scope, per constraint 4:** the dispatcher, a list of pairs, dynamic
