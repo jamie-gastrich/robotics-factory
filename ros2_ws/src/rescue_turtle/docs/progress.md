@@ -71,6 +71,10 @@
 - Done: corrected three instructions in `README.md` and `AGENTS.md` that were
   wrong. None of them changed behaviour.
 - Also wrote the repository `README.md` at the root, which did not exist.
+- Terminal order corrected: the launch starts turtlesim, so the launch is
+  terminal 1 and `turtle_teleop_key` is terminal 2. Verified that teleop-first
+  is not broken, only pointless: teleop publishes `/turtle1/cmd_vel` with no
+  subscriber and turtlesim subscribes when it starts.
 
 ### Decisions
 - The run instructions started `turtlesim_node` in one terminal *and* ran the
@@ -86,9 +90,15 @@
   prints the startup `idle` rather than the current state, which reads as "the
   rescue never started". Documented instead of changed: the latched startup idle
   is deliberate, so a subscriber that attaches late still sees a state.
+- Status clarified: version 1 is shipped and verified, and the project is not
+  finished. The changes in mind for it are 1.1. This supersedes the 2026-09-29
+  framing, where Phase 1 was the whole of the plan.
 - The 2026-09-29 entry says the visual check is unverified and the 2026-10-01
   entry calls it the open item. Both stay as written; this entry supersedes
   them.
 
 ### Next step
-- Version 1.1. The visual check is no longer blocking.
+- Version 1.1. The visual check is no longer blocking. Version 1 is shipped and
+  verified; the author has changes in mind for it that are numbered 1.1, and
+  that work has not started. Nothing is specced for it yet, so 1.1 begins with
+  a plan in this file's sibling, `spec.md`.

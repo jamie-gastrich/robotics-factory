@@ -42,7 +42,11 @@ creating the smallest useful node.
 - Default QoS (KEEP_LAST depth 10, RELIABLE, VOLATILE) was used. Deeper QoS
   tuning is deferred until a real reliability problem forces the question.
 
-## Task 3 — Heartbeat subscriber (PENDING APPROVAL)
+## Task 3 — Heartbeat subscriber (DROPPED, 2026-10-02)
+
+Dropped without being built. The project was closed at version 1; see the
+Session 2 entry in `docs/progress.md`. The plan is left here as written on the
+day it was drafted, for the record.
 
 **Goal:** Demonstrate that publisher and subscriber are fully decoupled.
 

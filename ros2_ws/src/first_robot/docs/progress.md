@@ -43,3 +43,26 @@
 - Write a subscriber node in a separate process, to show decoupled pub/sub:
   it imports nothing from the publisher and only needs to agree on the topic
   name and message type.
+
+## Session 2 — Closed at version 1, subscriber dropped
+
+**Done**
+- No code changed. This entry records a scope decision, not work.
+- The project is done as it stands and will not be added to.
+
+**Decisions**
+- Task 3, the subscriber, is dropped rather than built. It was specced to show
+  that pub/sub is decoupled, and the point has already been made: the heartbeat
+  is observed with `ros2 topic echo` from outside the process, and nothing in
+  the publisher knows or cares that anything is listening. A second node would
+  have restated that rather than added it.
+- The publisher still has no in-repo consumer. That is now a deliberate end
+  state, not an unfinished edge.
+
+**Known blemish, left as is**
+- `colcon test` skips `ament_copyright` here: the generated stub test files
+  carry no licence headers. Five tests, 0 failures, 1 skipped. Fixable with
+  headers if this package is ever built on again.
+
+**Next step**
+- None.

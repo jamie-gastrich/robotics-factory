@@ -12,8 +12,8 @@ try to avoid, which is writing something that sounds like it works.
 
 | Project | Version | State | What it is |
 | --- | --- | --- | --- |
-| [`rescue_turtle`](ros2_ws/src/rescue_turtle/README.md) | 1 | done | A turtlesim rescue game. You drive one turtle to a stranded one, and two nodes run the rules: attach, drag it home, score, respawn. |
-| [`first_robot`](ros2_ws/src/first_robot/) | — | in progress | The floor: a timer-driven publisher on `/heartbeat`, to prove the workspace, the build, and pub/sub mechanics. A subscriber is specced, not written. |
+| [`rescue_turtle`](ros2_ws/src/rescue_turtle/README.md) | 1 done, 1.1 next | in progress | A turtlesim rescue game. You drive one turtle to a stranded one, and two nodes run the rules: attach, drag it home, score, respawn. |
+| [`first_robot`](ros2_ws/src/first_robot/) | 1 | done | The floor: a timer-driven publisher on `/heartbeat`, to prove the workspace, the build, and pub/sub mechanics. Closed as it stands; the specced subscriber was dropped rather than built. |
 
 Neither project has been run on a robot. Both are simulation, deliberately, so
 the logic can be changed quickly and tested without hardware. The port to
@@ -190,8 +190,9 @@ command's own command line. Use a bracketed pattern:
 
 A version is a shipped state. Changes to what already shipped are numbered
 `1.1`, `1.2`, and so on, rather than inventing a new major version.
-`rescue_turtle` is at 1; the changes I have in mind for it are 1.1.
+`rescue_turtle` version 1 is shipped and verified; the changes I have in mind
+for it are 1.1, and that work has not started. `first_robot` is closed at 1.
 
-Roadmap, in order: finish the subscriber in `first_robot`, then
-`rescue_turtle` 1.1, then version 2 (an autonomous `rescuer` node: seek,
-grab, return on `cmd_vel`), then version 3 (several rescuers and a dispatcher).
+Roadmap, in order: `rescue_turtle` 1.1, then version 2 (an autonomous `rescuer`
+node: seek, grab, return on `cmd_vel`), then version 3 (several rescuers and a
+dispatcher).

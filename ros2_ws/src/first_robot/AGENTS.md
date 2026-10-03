@@ -10,7 +10,8 @@ starter point for publisher/subscriber exercises.
 - Nodes:
   - `first_robot_node` (`first_robot/first_robot_node.py`) — exists. Timer-driven
     publisher, logs and publishes each heartbeat.
-  - subscriber node — NOT YET WRITTEN.
+  - subscriber node — DROPPED 2026-10-02, never written. The project is closed
+    at version 1; see docs/progress.md.
 - Topics: `/heartbeat`, type `std_msgs/msg/String`, default 1.0 Hz
   - Rate is a parameter: `rate_hz` (default 1.0), override at launch with
     `--ros-args -p rate_hz:=4.0`
