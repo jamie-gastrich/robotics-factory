@@ -59,13 +59,14 @@ colcon build --packages-select rescue_turtle
 source install/setup.bash
 ```
 
-Then, in three separate terminals, each re-sourcing first.
+Then, in two separate terminals, each re-sourcing first.
 
-**Terminal 1** — the turtlesim window:
+**Terminal 1** — the turtlesim window and the two game nodes. The launch file
+starts turtlesim itself, so do not start a second one alongside it:
 
 ```bash
 source install/setup.bash
-ros2 run turtlesim turtlesim_node
+ros2 launch rescue_turtle rescue_turtle.launch.py
 ```
 
 **Terminal 2** — your keyboard control of the rescuer:
@@ -75,12 +76,17 @@ source install/setup.bash
 ros2 run turtlesim turtle_teleop_key
 ```
 
-**Terminal 3** — the game nodes, which also start turtlesim:
+Order does not matter technically: teleop publishes `/turtle1/cmd_vel` whether
+or not turtlesim exists yet, and turtlesim subscribes when it comes up. Starting
+the launch first is still the better instruction, because otherwise keypresses
+before the window exists go nowhere and look like a broken teleop.
 
-```bash
-source install/setup.bash
-ros2 launch rescue_turtle rescue_turtle.launch.py
-```
+`turtle_teleop_key` must run in a real terminal, not in the background. It puts
+the keyboard into raw mode, and without a tty it aborts with
+`Failed to get old console mode`.
+
+If you would rather drive an already-running turtlesim, pass
+`turtlesim_gui:=False` and start `ros2 run turtlesim turtlesim_node` yourself.
 
 Watch the victim spawn away from the start zone, drive the rescuer over to it,
 and the pair will attach once within `attach_distance`. The background turns red
@@ -124,8 +130,17 @@ ros2 node list                                    # the two pair-scoped nodes
 ros2 param list /rescue_manager_turtle1_to_turtle2
 ros2 topic echo /rescue_turtle/turtle1_to_turtle2/status
 ros2 topic info /turtle2/pose -v                  # publisher count of 1
-ros2 param get /turtlesim background_r            # 255 0 0 in RESCUE, 255 255 255 otherwise
+ros2 param get /turtlesim background_g            # 0 in RESCUE, 255 otherwise
 ```
+
+Read the colour from `background_g`, not `background_r`: the rescue colour is
+`255 0 0` and the default is `255 255 255`, so `background_r` is 255 either way
+and cannot tell the two states apart.
+
+The status topic is `TRANSIENT_LOCAL` and keeps a backlog, so a subscriber that
+connects late is handed every earlier status, oldest first. `ros2 topic echo`
+without `--once` therefore prints the startup `idle` before the current one.
+Read the whole sequence, or attach before the state you care about happens.
 
 There is one mechanical check that enforces the no-hard-coded-names rule:
 
@@ -133,9 +148,9 @@ There is one mechanical check that enforces the no-hard-coded-names rule:
 grep -rn "turtle1\|turtle2" rescue_turtle/        # must return nothing
 ```
 
-**Still outstanding:** the human visual check. The colour is confirmed by reading
-the parameter back, not by watching the window turn red and white. Nobody has
-looked yet.
+The human visual check has been done: driven on the keyboard, the background
+turns red on attach and the victim visibly tracks the rescuer, and both return
+to white on success with a new victim spawning clear of the start zone.
 
 ## Known limits
 

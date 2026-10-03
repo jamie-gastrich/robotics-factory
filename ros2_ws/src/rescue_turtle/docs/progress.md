@@ -62,3 +62,33 @@
 ### Next step
 - Start Version 1.1. The human visual check of Version 1 is still the open item
   from the entry above.
+
+## 2026-10-02 — Visual check done; corrected the verification instructions
+- Done: the human visual check is complete. Driven on the keyboard, the
+  background turns red on attach and the victim visibly tracks the rescuer; both
+  return to white on success and a new victim spawns clear of the start zone.
+  Version 1 has no outstanding check now.
+- Done: corrected three instructions in `README.md` and `AGENTS.md` that were
+  wrong. None of them changed behaviour.
+- Also wrote the repository `README.md` at the root, which did not exist.
+
+### Decisions
+- The run instructions started `turtlesim_node` in one terminal *and* ran the
+  launch in another, but the launch file starts turtlesim itself. Two
+  `/turtlesim` nodes. Now two terminals: `turtle_teleop_key`, then the launch.
+  The stale `(once it exists)` note in `AGENTS.md` went with it.
+- The documented colour check read `background_r`. That parameter is 255 both in
+  `255 0 0` and in `255 255 255`, so it cannot tell RESCUE from IDLE. The
+  check now reads `background_g`: 0 while rescuing, 255 otherwise. Verified live
+  in both states.
+- The status topic is `TRANSIENT_LOCAL` with depth 10, so a late subscriber is
+  handed the whole backlog, oldest first. `ros2 topic echo --once` therefore
+  prints the startup `idle` rather than the current state, which reads as "the
+  rescue never started". Documented instead of changed: the latched startup idle
+  is deliberate, so a subscriber that attaches late still sees a state.
+- The 2026-09-29 entry says the visual check is unverified and the 2026-10-01
+  entry calls it the open item. Both stay as written; this entry supersedes
+  them.
+
+### Next step
+- Version 1.1. The visual check is no longer blocking.

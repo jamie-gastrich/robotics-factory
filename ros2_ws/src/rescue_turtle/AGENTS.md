@@ -13,9 +13,11 @@ Rescue Turtle2: built on stock turtlesim (never modify turtlesim itself). Turtle
 cd ~/robotics-factory/ros2_ws
 colcon build --packages-select rescue_turtle
 source install/setup.bash
-ros2 run turtlesim turtlesim_node                    # terminal 1
-ros2 run turtlesim turtle_teleop_key                 # terminal 2
-ros2 launch rescue_turtle rescue_turtle.launch.py    # terminal 3 (once it exists)
+ros2 launch rescue_turtle rescue_turtle.launch.py    # terminal 1
+ros2 run turtlesim turtle_teleop_key                 # terminal 2 (needs a real tty)
+# The launch file starts turtlesim itself. Do not also run turtlesim_node
+# alongside it: two /turtlesim nodes. Use turtlesim_gui:=False to attach to
+# one that is already running.
 
 ## Definition of done (Version 1)
 - Package builds with no warnings; `colcon test --packages-select rescue_turtle` passes.
