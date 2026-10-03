@@ -57,9 +57,12 @@ DEFAULT_START_Y = 5.544444
 DEFAULT_ZONE_MIN = 4.944
 DEFAULT_ZONE_MAX = 6.144
 
-#: Canvas defaults, the turtlesim window is 11.54 m square.
+#: Canvas defaults, the turtlesim world is 11.088889 m square. Measured by
+#: driving a turtle into each wall: turtlesim clamps at that, not at the 11.54
+#: its older builds reported, so sampling up to 11.54 puts about 8% of the
+#: candidate poses off the canvas, where they do not exist.
 DEFAULT_CANVAS_MIN = 0.0
-DEFAULT_CANVAS_MAX = 11.54
+DEFAULT_CANVAS_MAX = 11.088889
 
 #: How often to re-check for turtlesim while no victim can be spawned.
 DEFAULT_SERVICE_RETRY_PERIOD_S = 1.0

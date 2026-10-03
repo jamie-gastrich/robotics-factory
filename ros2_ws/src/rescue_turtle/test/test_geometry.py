@@ -15,7 +15,10 @@
 """
 Unit tests for the pure geometry helpers.
 
-No ROS graph is needed: the module under test imports no rclpy.
+No ROS graph is needed: the module under test imports no rclpy and no Qt. The
+world-to-pixel helpers are here for the same reason as the rest: the y flip, from
+a world whose y points up to a canvas whose y points down, is the arithmetic the
+safe zone overlay is placed by, and it is checked here rather than by eye.
 """
 
 import math
@@ -28,11 +31,31 @@ from rescue_turtle.geometry import distance
 from rescue_turtle.geometry import distance_to_zone
 from rescue_turtle.geometry import in_zone
 from rescue_turtle.geometry import random_spawn_pose
+from rescue_turtle.geometry import world_to_pixel
+from rescue_turtle.geometry import zone_to_pixel_rect
 
-# The measured start zone and canvas of a stock turtlesim window.
+# The measured start zone and world of a stock turtlesim window: the walls are at
+# 11.088889 m, and the canvas over them is 500 px square.
 ZONE = (4.944, 6.144, 4.944, 6.144)
-CANVAS = (0.0, 11.54, 0.0, 11.54)
+CANVAS = (0.0, 11.088889, 0.0, 11.088889)
 MIN_SPAWN_DISTANCE = 2.0
+
+#: The measured canvas, in the units the overlay works in.
+WORLD_WIDTH_M = 11.088889
+WORLD_HEIGHT_M = 11.088889
+CANVAS_WIDTH_PX = 500.0
+CANVAS_HEIGHT_PX = 500.0
+
+#: The scale those two numbers give: 45.0902 px/m, so the 1.2 m start zone is
+#: 54.11 px across, which is 10.8% of the canvas.
+PX_PER_M = CANVAS_WIDTH_PX / WORLD_WIDTH_M
+ZONE_WIDTH_M = ZONE[1] - ZONE[0]
+ZONE_HEIGHT_M = ZONE[3] - ZONE[2]
+
+#: Where turtlesim spawns the first turtle, and therefore the middle of the
+#: canvas, because the world is square and the spawn point is its centre.
+SPAWN_X = 5.544444
+SPAWN_Y = 5.544444
 
 
 def test_distance_is_the_euclidean_gap() -> None:
@@ -196,3 +219,251 @@ def test_sampling_with_no_attempts_always_gives_up() -> None:
 def test_the_default_attempt_budget_is_finite() -> None:
     """The default is a number, not a silent infinite loop."""
     assert 0 < DEFAULT_MAX_ATTEMPTS < 100000
+
+
+# --------------------------------------------------------------- world to pixel
+
+
+def test_world_to_pixel_maps_the_near_origin_to_the_bottom_left() -> None:
+    """The origin of the world is the bottom left of the canvas, not the top."""
+    assert world_to_pixel(
+        0.0, 0.0,
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    ) == pytest.approx((0.0, CANVAS_HEIGHT_PX))
+
+
+def test_world_to_pixel_flips_y() -> None:
+    """
+    The world y axis points up and the screen one points down.
+
+    This is the whole reason the helper is tested: with the flip missing the
+    marker would be drawn at the mirror image of the start zone, which is the
+    middle of the canvas on a symmetric zone and therefore hard to see by eye.
+    """
+    top = world_to_pixel(
+        WORLD_WIDTH_M, WORLD_HEIGHT_M,
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    )
+    bottom = world_to_pixel(
+        WORLD_WIDTH_M, 0.0,
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    )
+    assert top == pytest.approx((CANVAS_WIDTH_PX, 0.0))
+    assert bottom == pytest.approx((CANVAS_WIDTH_PX, CANVAS_HEIGHT_PX))
+    # Three quarters of the way up the world is a quarter of the way down the
+    # canvas, so up on the left is down on the screen.
+    upper = world_to_pixel(
+        0.0, WORLD_HEIGHT_M * 0.75,
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    )
+    assert upper == pytest.approx((0.0, CANVAS_HEIGHT_PX * 0.25))
+
+
+def test_world_to_pixel_maps_the_far_corner_to_the_top_right() -> None:
+    """Both axes reach the far edge, so the whole world is covered exactly."""
+    assert world_to_pixel(
+        WORLD_WIDTH_M, WORLD_HEIGHT_M,
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    ) == pytest.approx((CANVAS_WIDTH_PX, 0.0))
+
+
+def test_world_to_pixel_maps_the_world_centre_to_the_canvas_centre() -> None:
+    """A square world over a square canvas has the same centre in both."""
+    assert world_to_pixel(
+        WORLD_WIDTH_M / 2.0, WORLD_HEIGHT_M / 2.0,
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    ) == pytest.approx((CANVAS_WIDTH_PX / 2.0, CANVAS_HEIGHT_PX / 2.0), abs=0.001)
+
+
+def test_the_rescuer_spawn_point_is_the_centre_of_the_canvas() -> None:
+    """
+    The measured start pose is the centre pixel, which is what centres the marker.
+
+    The world is a square and 11.088889 / 2 is 5.5444445, the pose turtlesim
+    spawns the first turtle at, so the "same coordinates as the rescuer spawns
+    at" that the overlay is asked for is the centre of the canvas.
+    """
+    assert world_to_pixel(
+        SPAWN_X, SPAWN_Y,
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    ) == pytest.approx((CANVAS_WIDTH_PX / 2.0, CANVAS_HEIGHT_PX / 2.0), abs=0.001)
+
+
+def test_world_to_pixel_maps_the_two_axes_independently() -> None:
+    """A canvas that is not square, or a world that is not, still fills exactly."""
+    assert world_to_pixel(
+        2.0, 3.0,
+        world_width_m=4.0, world_height_m=6.0,
+        canvas_width_px=400.0, canvas_height_px=150.0,
+    ) == pytest.approx((200.0, 75.0))
+
+
+# --------------------------------------------------------------- zone to pixel
+
+
+def test_zone_to_pixel_rect_is_the_measured_size_and_centre() -> None:
+    """
+    The 1.2 m start zone is 54.11 px, centred on the spawn point.
+
+    The zone's centre is 5.544 m and the world's is 5.5444445, so the two are
+    half a thousandth of a metre apart and the rectangle's centre lands within
+    0.03 px of the canvas centre rather than exactly on it.
+    """
+    left, top, width, height = zone_to_pixel_rect(
+        ZONE,
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    )
+    assert width == pytest.approx(ZONE_WIDTH_M * PX_PER_M, abs=0.01)
+    assert height == pytest.approx(ZONE_HEIGHT_M * PX_PER_M, abs=0.01)
+    assert width == pytest.approx(54.11, abs=0.01)
+    assert (left + width / 2.0) == pytest.approx(CANVAS_WIDTH_PX / 2.0, abs=0.05)
+    assert (top + height / 2.0) == pytest.approx(CANVAS_HEIGHT_PX / 2.0, abs=0.05)
+
+
+def test_zone_to_pixel_rect_puts_the_near_zone_at_the_bottom_of_the_canvas() -> None:
+    """A zone in the corner of the world lands in the opposite corner of the canvas."""
+    side = 1.2
+    left, top, width, height = zone_to_pixel_rect(
+        (0.0, side, 0.0, side),
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    )
+    assert left == pytest.approx(0.0)
+    assert width == pytest.approx(side * PX_PER_M, abs=0.01)
+    # Below, not above: the flip again, on a zone where it is unmistakable.
+    assert top == pytest.approx(CANVAS_HEIGHT_PX - side * PX_PER_M)
+    assert height == pytest.approx(side * PX_PER_M, abs=0.01)
+
+
+def test_zone_to_pixel_rect_puts_the_far_zone_at_the_top_of_the_canvas() -> None:
+    """The same size of zone against the far walls is at the top, and still flush."""
+    far_min = WORLD_WIDTH_M - 1.2
+    left, top, width, height = zone_to_pixel_rect(
+        (far_min, WORLD_WIDTH_M, far_min, WORLD_HEIGHT_M),
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    )
+    assert top == pytest.approx(0.0)
+    assert left == pytest.approx(CANVAS_WIDTH_PX - width)
+
+
+def test_the_start_zone_rectangle_is_these_four_numbers() -> None:
+    """
+    The whole rectangle as literal expected values, worked out by hand.
+
+    500 px over 11.088889 m is 45.09018 px/m, so the zone's left edge at 4.944 m
+    is 4.944 * 45.09018 = 222.9258 px, and its top edge is y_max measured down
+    from the top of the canvas: 500 - 6.144 * 45.09018 = 222.9659 px. Top and left
+    differ by the flip and by the zone's centre sitting half a thousandth of a
+    metre off the canvas centre. Each side is 1.2 m, or 54.1082 px.
+
+    Written as literals rather than as agreement between ``zone_to_pixel_rect``
+    and the ``world_to_pixel`` calls it is built from: the two agreeing proves
+    only that they are consistent, so a flip, a scale or a transposed axis
+    inside both of them would still pass.
+    """
+    assert zone_to_pixel_rect(
+        ZONE,
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    ) == pytest.approx((222.9258, 222.9659, 54.1082, 54.1082), abs=0.001)
+
+
+def test_zone_to_pixel_rect_of_the_whole_world_is_the_whole_canvas() -> None:
+    """The extreme case: the world fills the canvas exactly, edge to edge."""
+    assert zone_to_pixel_rect(
+        (0.0, WORLD_WIDTH_M, 0.0, WORLD_HEIGHT_M),
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    ) == pytest.approx((0.0, 0.0, CANVAS_WIDTH_PX, CANVAS_HEIGHT_PX))
+
+
+def test_zone_to_pixel_rect_of_an_upright_zone_has_positive_extents() -> None:
+    """
+    Qt reads a negative width as an empty rectangle, so an upright zone must not make one.
+
+    Upright is the precondition, not a result: this pins that the ordinary cases
+    come out positive, and the inverted case is pinned separately below as what it
+    is rather than as what it should have been.
+    """
+    for zone in (
+        (0.0, 1.0, 0.0, 1.0),
+        ZONE,
+        (0.0, WORLD_WIDTH_M, 0.0, WORLD_HEIGHT_M),
+        (5.0, 6.0, 5.0, 5.5),
+    ):
+        _, _, width, height = zone_to_pixel_rect(
+            zone,
+            world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+            canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+        )
+        assert width > 0.0
+        assert height > 0.0
+
+
+def test_zone_to_pixel_rect_of_an_inverted_zone_returns_negative_extents() -> None:
+    """
+    An inverted zone is returned as the arithmetic gives it, not repaired.
+
+    The zone ``(2, 1, 3, 2)`` has ``x_min > x_max`` and ``y_min > y_max``, so the
+    rectangle runs backwards on both axes: 2 m along is 90.1804 px, 3 m down is
+    409.8196 px, and each extent is -1 m, or -45.0902 px. A caller that gets one of
+    these has passed a zone that does not exist, and
+    :func:`rescue_turtle.validation.safe_zone_configuration_errors` is where that
+    is refused: this pure function is arithmetic and does not check its argument.
+    """
+    assert zone_to_pixel_rect(
+        (2.0, 1.0, 3.0, 2.0),
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    ) == pytest.approx((90.1804, 409.8196, -45.0902, -45.0902), abs=0.001)
+
+
+def test_zone_to_pixel_rect_scales_each_axis_on_its_own() -> None:
+    """
+    A rectangular canvas maps a square zone to a rectangle of the right ratio.
+
+    Guards against the two axes being swapped, which a square canvas cannot show
+    because it maps the wrong way up.
+    """
+    left, top, width, height = zone_to_pixel_rect(
+        (0.0, 2.0, 0.0, 2.0),
+        world_width_m=4.0, world_height_m=4.0,
+        canvas_width_px=400.0, canvas_height_px=200.0,
+    )
+    assert width == pytest.approx(200.0)
+    assert height == pytest.approx(100.0)
+    assert left == pytest.approx(0.0)
+    assert top == pytest.approx(100.0)
+
+
+def test_a_zone_moved_off_the_centre_moves_the_rectangle_with_it() -> None:
+    """
+    The rectangle tracks the zone rather than being pinned to the centre.
+
+    The zone here is moved a little further along x and a little lower in y, so
+    both the left edge and the top edge have to move down and to the right. That
+    is the pair of directions a flipped y axis gets wrong: getting only one of
+    them right still puts the marker in the wrong corner of the canvas.
+    """
+    centre = zone_to_pixel_rect(
+        ZONE,
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    )
+    shifted = zone_to_pixel_rect(
+        (5.0, 6.2, 4.0, 5.2),
+        world_width_m=WORLD_WIDTH_M, world_height_m=WORLD_HEIGHT_M,
+        canvas_width_px=CANVAS_WIDTH_PX, canvas_height_px=CANVAS_HEIGHT_PX,
+    )
+    assert shifted[0] > centre[0]
+    assert shifted[1] > centre[1]
+    assert shifted[2:] == pytest.approx(centre[2:])

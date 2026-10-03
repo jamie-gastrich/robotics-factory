@@ -378,3 +378,231 @@ counter, and anything in the Open questions section.
 pair discovery or re-pairing at runtime, per-pair background colours, and any
 fleet-wide status aggregation. Steps 11 and 12 prove the code tolerates a second
 *manually started* pair; they are not a fleet.
+
+## Version 1.1 Plan: Safe zone overlay
+
+### Goal
+
+Show `resource/safe_zone.png` on the turtlesim canvas, centred on the point the
+rescuer spawns at, scaled to the start zone, and leave it there.
+
+### The request this plan answers
+
+> add the safe_zone.png to the same coordinates that the rescuer turtle spawns in
+> at and stays there. so it will probably need to redeploy to the default
+> coordinates when a /clear happens
+
+The "redeploy on `/clear`" half of that is **not needed**, and the reason is worth
+writing down before the code, because it decides the whole design. `/clear` wipes
+*turtlesim's* canvas. An image drawn into turtlesim's canvas would be destroyed
+by it. An image drawn by *us*, in our own window, is a different surface
+entirely: turtlesim has no handle on it, so `/clear` cannot erase it. Nothing to
+redeploy.
+
+What *does* need handling is the stacking order. On X11, clicking the turtlesim
+window raises it, and a raise beats an ordinary "always on top" window, so the
+overlay can end up behind the window it is annotating. Re-asserting the overlay's
+geometry and raise on a short timer covers that, and covers the user moving or
+resizing the window too. That timer is the mechanism; no `/clear` hook is needed.
+
+### Measured facts this design rests on
+
+All of these were measured against the installed turtlesim 1.10.9 (distro
+`lyrical`) on this machine, not taken from documentation.
+
+**turtlesim cannot be given a custom image.** This is the reason the feature is
+an overlay and not a spawn.
+
+- `turtlesim_msgs/srv/Spawn` has fields `x`, `y`, `theta`, `name`. There is no
+  texture field.
+- The only parameters on `/turtlesim` are `background_r`, `background_g`,
+  `background_b` and `holonomic`. Nothing selects an image file.
+- At startup turtlesim opens **all thirteen** sprites in
+  `share/turtlesim/images` (`ardent.png` through `rolling.png`, one per distro),
+  and on every `/spawn` it opens **nothing**: it indexes the set it already
+  loaded. Verified with `inotify` on `IN_OPEN` against a live turtlesim.
+- So `/spawn name:=safe_zone` does not draw `safe_zone.png`, and does not draw
+  nothing either. It succeeds, returns `safe_zone`, and draws one of the stock
+  sprites — an ordinary turtle parked in the middle of the start zone.
+- `/opt/ros/lyrical/share/turtlesim/images` is not writable, so the file cannot
+  be placed beside the sprites either.
+
+`AGENTS.md` says never modify turtlesim. That rules out the last option as well,
+so an overlay is the only route to showing a custom PNG.
+
+**Canvas and world geometry.** Needed to place the image exactly.
+
+- The canvas `QImage` is **500 x 500** px, `Format_RGB32` (read out of the
+  `TurtleFrame` constructor: `QImage(500, 500, 5)`).
+- The turtlesim client window measures **500 x 500** px, so the image fills the
+  client area and its origin is the client origin. Verified with `xwininfo`.
+- The world is **[0, 11.088889] m square**, clamped, not 11.54. Measured by
+  driving a turtle into each wall: `-x` stops at exactly `0.0`, `+x` and `+y`
+  stop at `11.088889122009277` (float32 of `11.088889`). The spawner clamps
+  too: a spawn requested at `(11.3, 11.3)` comes back as
+  `(11.088889, 11.088889)`.
+- `11.088889 / 2 = 5.5444445`, which is exactly the pose turtlesim spawns
+  `turtle1` at. So the rescuer's spawn point is the exact centre of the canvas,
+  and the requested "same coordinates as the rescuer spawns at" is the centre.
+- Scale: **45.0902 px/m**. Cross-check: the stock sprites are 45 x 45 px, which
+  is 0.998 m — a ~1 m turtle in an 11 m arena, as expected. If the canvas were
+  640 px (as turtlesim's older builds used) the sprite would be 0.81 m and the
+  centre would not land on the centre pixel. The 500 px reading is the one that
+  is self-consistent.
+- The start zone is 1.2 m square, so it is **54.11 px**, 10.8% of the canvas.
+
+**Correction to the Version 1 tables.** The `canvas_x_min/max` and
+`canvas_y_min/max` defaults of `0.0` / `11.54` in the spawner table above are
+wrong; the real extent is `11.088889`. This is left in place as written history
+and corrected here. It is not currently harmful, because turtlesim clamps an
+off-canvas spawn back to the wall, but it does mean the rejection sampler draws
+in a region about 0.45 m larger than the real canvas on each side, so roughly 8%
+of the poses it considers do not exist. Fixed as part of this version.
+
+**Environment, and the one thing that has to change.**
+
+- The session is **Wayland** (`WAYLAND_DISPLAY=wayland-0`, Weston nested on
+  XWayland). A Wayland client has no window that another process can find or
+  position, and there is no X11 equivalent of window enumeration.
+- Forced onto `QT_QPA_PLATFORM=xcb`, turtlesim's window does appear in the X
+  tree: title `TurtleSim`, WM class `turtlesim_node`, and `xdotool search
+  --name '^TurtleSim$'` finds it. This is the approach taken, and **the launch
+  file will set `QT_QPA_PLATFORM=xcb` for turtlesim and for the overlay node.**
+  This is a real trade: turtlesim renders through XWayland instead of natively.
+- `PyQt5` is **not** installed; `PySide6` is. The overlay uses PySide6.
+- `PIL` is available, though the design does not need it: Qt loads the PNG.
+- No `python-xlib`, no `strace`, no `xwd`/ImageMagick. The window is found with
+  `ctypes` against `libX11` directly, so there is no new dependency to install
+  and no subprocess.
+- **Screenshots do not work on this machine.** `QScreen.grabWindow` returns an
+  all-black pixmap even for a window the grabbing process has just shown and
+  filled with a known colour, and the same is true of the root window. So the
+  overlay's placement cannot be verified by reading pixels back, by us or by an
+  agent. The automated checks are numeric and the visual check is the human's,
+  which is already this project's division of labour.
+
+**The image itself.** `safe_zone.png` is 256 x 256 RGBA: a transparent field
+(61192 px fully transparent, 0 fully opaque) with a centred, symmetric marker in
+two colours, `(0, 100, 255, 180)` and `(0, 255, 255, 200)`. Its non-transparent
+content occupies x,y `8..248`, centred on `128,128` — so the art is 93.75% of
+the image, and scaling the whole 256 px image to the 1.2 m zone puts the art at
+1.125 m (50.7 px) with the centre exactly on the zone centre. The transparency
+is what makes an overlay workable at all: the marker is see-through everywhere
+it is not drawn, so the victim and rescuer stay visible inside the zone.
+
+One consequence to state plainly: an overlay window is *always above*
+turtlesim's canvas, so the marker is drawn over the turtles rather than under
+them. With this image that is harmless, because it is transparent except where
+the marker is. A future opaque image would hide the rescue it is annotating.
+
+### Design
+
+A new node, `safe_zone`, that owns the overlay and nothing else. It is
+deliberately **not** part of `rescue_manager`: the manager's state is scoped to
+one `(rescuer, victim)` pair, while the overlay is scoped to one *turtlesim
+window*, and in Version 3 there will be several pairs against one canvas. Folding
+it into the manager would mean the manager drawing, which breaks constraint 2
+and would have to be undone later.
+
+The node does four things, on a timer:
+
+1. Find the turtlesim window by title and WM class, via `ctypes` on `libX11`
+   (`XQueryTree` walking for `_NET_WM_NAME`, `XGetClassHint` for the class,
+   `XGetWindowAttributes` and `XTranslateCoordinates` for the absolute
+   position). No subprocess, no new dependency.
+2. Compute the canvas rectangle in screen pixels from the measured geometry:
+   the client rect, offset by `canvas_margin_px`, scaled by `canvas_width_px /
+   world_width_m`.
+3. Create or move a frameless, translucent, always-on-top,
+   input-transparent Qt window exactly over that rectangle, and paint the PNG
+   into the pixel rectangle that the start zone occupies inside it.
+4. Re-assert steps 1-3 on every tick, which is what covers a raise, a move, a
+   resize, and `/clear`.
+
+The world-to-pixel arithmetic is the part worth testing, so it does not live in
+the node. It goes in `geometry.py`, which already imports no rclpy, as a pure
+function from `(zone bounds, world extent, canvas pixel size)` to a rectangle.
+That keeps the y-flip — world y up, screen y down — under unit test instead of
+under the human's eye.
+
+`/clear` is not called, subscribed to, or waited for. See the top of this
+section for why.
+
+### Files
+
+| Path | Change |
+| --- | --- |
+| `rescue_turtle/geometry.py` | Add the pure world-to-pixel and zone-to-pixel-rectangle helpers. No rclpy, no Qt. |
+| `rescue_turtle/safe_zone.py` | **New.** `SafeZoneNode`: the X11 window lookup and the Qt overlay window. |
+| `rescue_turtle/validation.py` | Add `safe_zone_configuration_errors`, matching the existing pattern. |
+| `launch/rescue_turtle.launch.py` | Set `QT_QPA_PLATFORM=xcb` for turtlesim and the overlay; add the overlay node; add `show_safe_zone` and `safe_zone_image` arguments. |
+| `setup.py` | New `safe_zone` entry point; install `resource/safe_zone.png` to `share/rescue_turtle/media/`. |
+| `package.xml` | Add `ament_index_python`; note the PySide6 dependency in a comment. |
+| `rescue_turtle/spawner.py` | `DEFAULT_CANVAS_MAX` `11.54` -> `11.088889`, per the correction above. |
+| `test/test_geometry.py` | Tests for the new helpers, including the y-flip and the centre. |
+| `test/test_validation.py` | Tests for the new checks. |
+
+`PySide6` is imported inside `safe_zone.py` and only when the overlay is
+actually built, so the unit tests never import Qt.
+
+### Parameters
+
+**safe_zone**
+
+| Name | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `image_path` | str | `''` | Empty resolves to the installed `share/rescue_turtle/media/safe_zone.png`. |
+| `turtlesim_window_title` | str | `TurtleSim` | Matched exactly. Verified: this is the real title, not `Turtlesim`. |
+| `turtlesim_window_class` | str | `turtlesim_node` | Matched exactly. Verified. |
+| `turtlesim_gui` | bool | `True` | `False` disables the node entirely, headless. |
+| `start_zone_x_min/max`, `start_zone_y_min/max` | float | `4.944`, `6.144` | Must match the spawner and the manager. |
+| `world_width_m`, `world_height_m` | float | `11.088889` | Measured, not 11.54. |
+| `canvas_width_px`, `canvas_height_px` | float | `500.0` | Measured from this build. |
+| `canvas_margin_px` | float | `0.0` | Offset of the canvas inside the client rect; 0 here because the `QImage` is the same size as the window. |
+| `track_period_s` | float | `0.1` | How often the window is re-found and re-raised. |
+| `node_name` | str | `safe_zone` | |
+
+If the measured window size disagrees with `canvas_width_px`/`canvas_height_px`
+the node logs a warning naming both numbers and continues, rather than
+misplacing the image silently or refusing to run.
+
+### Definition of done
+
+- `colcon build --packages-select rescue_turtle` is warning-free;
+  `colcon test` passes; `colcon test-result --verbose` is clean.
+- `grep -rn "turtle1\|turtle2" rescue_turtle/` still returns nothing.
+- `ros2 node list` shows the two pair-scoped nodes plus `/safe_zone`, with
+  `turtlesim_gui:=False` the node is present but idle unless an X11 turtlesim is running.
+- `ros2 param list /safe_zone` shows every parameter in the table above.
+- The zone rectangle the node computes is logged and matches the arithmetic:
+  1.2 m -> 54.11 px, centred on the 500 px canvas, y flipped.
+- `/clear` on its own does not disturb the overlay, which is asserted by the
+  human because it is a visual property.
+- Human visual check: the marker is visible, centred on the rescuer's spawn
+  point, sized to the start zone, still there after several `/clear` calls, and
+  the victim is visible through it.
+
+### Known limits, stated up front
+
+- turtlesim must run on X11. The launch file forces it, but running turtlesim by
+  hand on the native Wayland session means the overlay cannot find it, and the
+  node says so in the log rather than failing silently.
+- The overlay is above the turtles, never below them. Fine for a transparent
+  marker, wrong for an opaque one.
+- One overlay per turtlesim window. Two turtlesim windows means two overlays,
+  which the launch file does not create.
+- Placement is arithmetic on measured constants. A different turtlesim build
+  with a different canvas size needs the two `canvas_*_px` parameters changing;
+  the size check above is what makes that visible instead of mysterious.
+- The overlay covers the canvas only. The turtlesim window's own controls sit
+  below the canvas and stay clickable, and the overlay is input-transparent
+  anyway.
+
+### Open, for whoever picks this up
+
+- The image is drawn once and never changes with game state. Tinting it on
+  RESCUE, or hiding it during the post-success hold, is deliberately not in this
+  version.
+- Whether `safe_zone` should be one node per window or should become a small
+  library the launch file instantiates, is left until Version 3 has more than
+  one canvas to cover.

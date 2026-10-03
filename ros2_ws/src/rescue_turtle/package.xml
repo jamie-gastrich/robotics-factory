@@ -3,7 +3,7 @@
 <package format="3">
   <name>rescue_turtle</name>
   <version>0.0.0</version>
-  <description>Rescue one turtlesim turtle with another: spawner and rescue manager.</description>
+  <description>Rescue one turtlesim turtle with another: spawner, rescue manager and safe zone.</description>
   <maintainer email="jamie-gastrich@users.noreply.github.com">Jamie</maintainer>
   <license>Apache-2.0</license>
 
@@ -12,6 +12,20 @@
   <depend>std_srvs</depend>
   <depend>turtlesim</depend>
   <depend>turtlesim_msgs</depend>
+  <!-- The safe zone overlay finds the installed marker through the ament index. -->
+  <depend>ament_index_python</depend>
+
+  <!-- PySide6 draws the safe zone marker over the turtlesim canvas. It is
+       imported lazily and only on that node's GUI path, so it is not declared
+       as a dependency: on this machine PySide6 comes from the distribution
+       packages python3-pyside6 (the meta package; python3-pyside6.qtcore,
+       .qtgui and .qtwidgets are the parts actually installed), which are not
+       pulled in by any key this package could declare. python3-qt-bindings,
+       which python_qt_binding uses, names the distro's default binding rather
+       than PySide6, so declaring it would claim a dependency this code does not
+       import. rosdep is not initialised here, so no key has been resolved and
+       none is claimed: install python3-pyside6 alongside this package, or run
+       the overlay's headless path with turtlesim_gui:=False. -->
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>

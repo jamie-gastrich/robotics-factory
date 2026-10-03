@@ -13,9 +13,9 @@
 # limitations under the License.
 
 """
-Startup checks on the two nodes' parameters, as functions over plain values.
+Startup checks on the three nodes' parameters, as functions over plain values.
 
-Both nodes fail fast on a parameter combination that cannot work, so that a
+The nodes fail fast on a parameter combination that cannot work, so that a
 mistyped threshold is one clear log line and a non-zero exit instead of a node
 quietly misbehaving. The rules are here rather than in the node methods because
 they are arithmetic on a handful of numbers: with no rclpy import they are
@@ -41,6 +41,25 @@ def zone_errors(label: str, zone: Box) -> list[str]:
     x_min, x_max, y_min, y_max = zone
     if x_min >= x_max or y_min >= y_max:
         return [f'{label} is empty: x [{x_min}, {x_max}], y [{y_min}, {y_max}]']
+    return []
+
+
+def zone_on_world_errors(zone: Box, world_size: tuple[float, float]) -> list[str]:
+    """
+    Return why a zone cannot be drawn on the world, empty when it can be.
+
+    The world runs from the origin to ``(width, height)``, because that is where
+    turtlesim puts it. A zone off the world maps to pixels off the canvas, so an
+    overlay built from it would be drawn where no turtle can ever be, which is
+    worse than the mistake being refused.
+    """
+    world_width_m, world_height_m = world_size
+    x_min, x_max, y_min, y_max = zone
+    if x_min < 0.0 or y_min < 0.0 or x_max > world_width_m or y_max > world_height_m:
+        return [
+            f'start zone x [{x_min}, {x_max}], y [{y_min}, {y_max}] is not inside '
+            f'the world x [0, {world_width_m}], y [0, {world_height_m}]'
+        ]
     return []
 
 
@@ -112,9 +131,52 @@ def manager_configuration_errors(
 
 
 def color_errors(label: str, color: tuple[int, int, int]) -> list[str]:
-    """Return why a colour triple cannot be a background, empty when it can."""
+    """Return why a colour triple cannot be a background, empty when it can be."""
     return [
         f'{label}_color component {component} is outside [{COLOR_MIN}, {COLOR_MAX}]'
         for component in color
         if not COLOR_MIN <= component <= COLOR_MAX
     ]
+
+
+def safe_zone_configuration_errors(
+    *,
+    zone: Box,
+    world_size: tuple[float, float],
+    canvas_size_px: tuple[float, float],
+    canvas_margin_px: float,
+    track_period_s: float,
+    window_title: str,
+    window_class: str,
+) -> list[str]:
+    """Return every reason the safe zone overlay's parameters cannot work."""
+    errors: list[str] = []
+    world_width_m, world_height_m = world_size
+    canvas_width_px, canvas_height_px = canvas_size_px
+    if world_width_m <= 0.0:
+        errors.append(f'world_width_m must be > 0, got {world_width_m}')
+    if world_height_m <= 0.0:
+        errors.append(f'world_height_m must be > 0, got {world_height_m}')
+    if canvas_width_px <= 0.0:
+        errors.append(f'canvas_width_px must be > 0, got {canvas_width_px}')
+    if canvas_height_px <= 0.0:
+        errors.append(f'canvas_height_px must be > 0, got {canvas_height_px}')
+    if canvas_margin_px < 0.0:
+        errors.append(f'canvas_margin_px must be >= 0, got {canvas_margin_px}')
+    if track_period_s <= 0.0:
+        errors.append(f'track_period_s must be > 0, got {track_period_s}')
+    empty_zone = zone_errors('start zone', zone)
+    errors.extend(empty_zone)
+    if not empty_zone and world_width_m > 0.0 and world_height_m > 0.0:
+        errors.extend(zone_on_world_errors(zone, world_size))
+    if not window_title:
+        errors.append(
+            'turtlesim_window_title must not be empty: the turtlesim window '
+            'cannot be found by matching nothing'
+        )
+    if not window_class:
+        errors.append(
+            'turtlesim_window_class must not be empty: the turtlesim window '
+            'cannot be found by matching nothing'
+        )
+    return errors

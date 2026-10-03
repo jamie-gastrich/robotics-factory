@@ -13,11 +13,22 @@
 # limitations under the License.
 
 """
-Launch one rescue_turtle pair.
+Launch one rescue_turtle pair, with the safe zone overlay.
 
-Brings up turtlesim, the spawner and the rescue_manager for a single
-(rescuer, victim) pair. Set ``turtlesim_gui:=False`` to attach to a turtlesim
-that is already running, which is how the headless checks drive it.
+Brings up turtlesim, the spawner, the rescue_manager for a single
+(rescuer, victim) pair, and the safe zone overlay. Set ``turtlesim_gui:=False``
+to attach to a turtlesim that is already running, which is how the headless
+checks drive it. The overlay follows that choice: it needs an X display and a
+turtlesim window to sit over, not a turtlesim of its own, so it is started
+whenever ``show_safe_zone`` is true, whichever way turtlesim was started.
+
+turtlesim and the overlay are both forced onto X11 with ``QT_QPA_PLATFORM=xcb``,
+because the overlay finds the canvas by asking X11 where the turtlesim window
+is, and a Wayland client has no window another process can find or place. That
+is a real trade: turtlesim then renders through XWayland rather than natively.
+Without it the overlay logs that it found no window, which is the documented
+failure rather than a silent one. An externally started turtlesim has to be on
+X11 too, and the launch file cannot enforce that from here.
 
 This does not start ``turtle_teleop_key``: the rescuer is driven by a human on
 the keyboard, and that needs a terminal of its own, not a managed process. It
@@ -37,13 +48,26 @@ DEFAULT_RESCUER_NAME = 'turtle1'
 DEFAULT_VICTIM_NAME = 'turtle2'
 DEFAULT_TURTLESIM_NODE = 'turtlesim'
 
+# The start zone, half-width 0.6 m around the measured start pose at the centre of
+# the canvas. Three nodes need it and each has its own default, so it is
+# declared here once and passed to all three: retuning the zone is then one edit
+# in this file rather than three that have to be kept equal by hand.
+DEFAULT_ZONE_MIN = '4.944'
+DEFAULT_ZONE_MAX = '6.144'
+
+# The overlay locates the canvas through libX11, so both windows it draws over
+# and between have to be X11 clients. Set on the processes here rather than left
+# to the environment, because the default on this machine's session is Wayland.
+QT_PLATFORM_ENVIRONMENT = {'QT_QPA_PLATFORM': 'xcb'}
+
 
 def generate_launch_description() -> LaunchDescription:
     """
     Return the launch description for one pair.
 
     :return: The launch description, arguments first, then turtlesim (if
-        asked for), then the spawner and the rescue_manager.
+        asked for), then the spawner, the rescue_manager and the safe zone
+        overlay (if asked for).
     """
     rescuer_name = LaunchConfiguration('rescuer_name')
     victim_name = LaunchConfiguration('victim_name')
@@ -56,6 +80,12 @@ def generate_launch_description() -> LaunchDescription:
     rng_seed = LaunchConfiguration('rng_seed')
     turtlesim_node = LaunchConfiguration('turtlesim_node')
     turtlesim_gui = LaunchConfiguration('turtlesim_gui')
+    show_safe_zone = LaunchConfiguration('show_safe_zone')
+    safe_zone_image = LaunchConfiguration('safe_zone_image')
+    zone_x_min = LaunchConfiguration('start_zone_x_min')
+    zone_x_max = LaunchConfiguration('start_zone_x_max')
+    zone_y_min = LaunchConfiguration('start_zone_y_min')
+    zone_y_max = LaunchConfiguration('start_zone_y_max')
 
     arguments = [
         DeclareLaunchArgument(
@@ -91,6 +121,24 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument(
             'turtlesim_gui', default_value='True',
             description='Start turtlesim here, or False to use one already running'),
+        DeclareLaunchArgument(
+            'show_safe_zone', default_value='True',
+            description='Draw the safe zone marker over the turtlesim canvas'),
+        DeclareLaunchArgument(
+            'safe_zone_image', default_value='',
+            description='Marker file, empty uses the one installed with the package'),
+        DeclareLaunchArgument(
+            'start_zone_x_min', default_value=DEFAULT_ZONE_MIN,
+            description='World x of the start zone, passed to all three nodes'),
+        DeclareLaunchArgument(
+            'start_zone_x_max', default_value=DEFAULT_ZONE_MAX,
+            description='World x of the start zone, passed to all three nodes'),
+        DeclareLaunchArgument(
+            'start_zone_y_min', default_value=DEFAULT_ZONE_MIN,
+            description='World y of the start zone, passed to all three nodes'),
+        DeclareLaunchArgument(
+            'start_zone_y_max', default_value=DEFAULT_ZONE_MAX,
+            description='World y of the start zone, passed to all three nodes'),
     ]
 
     turtlesim = Node(
@@ -99,6 +147,7 @@ def generate_launch_description() -> LaunchDescription:
         name=turtlesim_node,
         output='screen',
         condition=IfCondition(turtlesim_gui),
+        additional_env=QT_PLATFORM_ENVIRONMENT,
     )
 
     # Both nodes get the same pair, so they derive the same status topic and
@@ -112,10 +161,24 @@ def generate_launch_description() -> LaunchDescription:
         }
     ]
 
+    # The same substitutions to all three nodes that care about the start zone,
+    # rather than three sets of defaults that have to be kept equal by hand: the
+    # spawner samples around it, the manager scores arrival in it and the
+    # overlay draws it, and a zone the three disagree about is a marker drawn in
+    # the wrong place rather than an error.
+    zone_parameters = [
+        {
+            'start_zone_x_min': zone_x_min,
+            'start_zone_x_max': zone_x_max,
+            'start_zone_y_min': zone_y_min,
+            'start_zone_y_max': zone_y_max,
+        }
+    ]
+
     spawner = Node(
         package='rescue_turtle',
         executable='spawner',
-        parameters=pair_parameters + [
+        parameters=pair_parameters + zone_parameters + [
             {
                 'node_name': spawner_node_name,
                 'min_spawn_distance': min_spawn_distance,
@@ -129,7 +192,7 @@ def generate_launch_description() -> LaunchDescription:
     rescue_manager = Node(
         package='rescue_turtle',
         executable='rescue_manager',
-        parameters=pair_parameters + [
+        parameters=pair_parameters + zone_parameters + [
             {
                 'node_name': manager_node_name,
                 'attach_distance': attach_distance,
@@ -140,4 +203,25 @@ def generate_launch_description() -> LaunchDescription:
         output='screen',
     )
 
-    return LaunchDescription(arguments + [turtlesim, spawner, rescue_manager])
+    # Scoped to one canvas rather than to the pair, so it is named neither after
+    # the rescuer nor after the victim: in Version 3 several pairs share one
+    # canvas and one overlay covers them all. Started whenever it is asked for,
+    # including when turtlesim was not started here: the overlay needs a
+    # turtlesim window to sit over and an X display to find it on, and neither
+    # has to come from this file. turtlesim_gui is therefore not passed to it.
+    # From here the parameter could only ever be True, and a launch argument that
+    # cannot be False is not one.
+    safe_zone = Node(
+        package='rescue_turtle',
+        executable='safe_zone',
+        parameters=zone_parameters + [
+            {
+                'image_path': safe_zone_image,
+            },
+        ],
+        output='screen',
+        condition=IfCondition(show_safe_zone),
+        additional_env=QT_PLATFORM_ENVIRONMENT,
+    )
+
+    return LaunchDescription(arguments + [turtlesim, spawner, rescue_manager, safe_zone])

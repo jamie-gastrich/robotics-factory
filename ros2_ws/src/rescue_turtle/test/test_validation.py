@@ -13,9 +13,9 @@
 # limitations under the License.
 
 """
-Unit tests for the startup parameter checks of both nodes.
+Unit tests for the startup parameter checks of all three nodes.
 
-No ROS graph is needed: the module under test imports no rclpy. Both nodes fail
+No ROS graph is needed: the module under test imports no rclpy. Every node fails
 fast by raising the first of these errors, so what matters here is that every
 rule names the parameter it is about, because that string is the whole error
 message an operator gets.
@@ -25,13 +25,15 @@ import pytest
 
 from rescue_turtle.geometry import canvas_has_room
 from rescue_turtle.validation import manager_configuration_errors
+from rescue_turtle.validation import safe_zone_configuration_errors
 from rescue_turtle.validation import spawner_configuration_errors
 from rescue_turtle.validation import zone_errors
+from rescue_turtle.validation import zone_on_world_errors
 
-#: The measured start pose, start zone and canvas of a stock turtlesim.
+#: The measured start pose, start zone, world and canvas of a stock turtlesim.
 START = (5.544444, 5.544444)
 ZONE = (4.944, 6.144, 4.944, 6.144)
-CANVAS = (0.0, 11.54, 0.0, 11.54)
+CANVAS = (0.0, 11.088889, 0.0, 11.088889)
 
 
 def spawner_errors(**overrides: object) -> list[str]:
@@ -62,6 +64,21 @@ def manager_errors(**overrides: object) -> list[str]:
     }
     arguments.update(overrides)
     return manager_configuration_errors(**arguments)  # type: ignore[arg-type]
+
+
+def safe_zone_errors(**overrides: object) -> list[str]:
+    """Return the overlay's configuration errors with defaults and overrides."""
+    arguments: dict[str, object] = {
+        'zone': ZONE,
+        'world_size': (11.088889, 11.088889),
+        'canvas_size_px': (500.0, 500.0),
+        'canvas_margin_px': 0.0,
+        'track_period_s': 0.1,
+        'window_title': 'TurtleSim',
+        'window_class': 'turtlesim_node',
+    }
+    arguments.update(overrides)
+    return safe_zone_configuration_errors(**arguments)  # type: ignore[arg-type]
 
 
 # --------------------------------------------------------------------- geometry
@@ -208,3 +225,119 @@ def test_the_colour_bounds_are_inclusive() -> None:
 def test_a_manager_zone_with_no_area_is_rejected() -> None:
     """No zone means no goal, so the rescue could never finish."""
     assert 'start zone is empty' in manager_errors(zone=(6.144, 4.944, 4.944, 6.144))[0]
+
+
+# ----------------------------------------------------------------- zone on world
+
+
+def test_a_zone_inside_the_world_has_no_errors() -> None:
+    """The measured zone is well within the measured world."""
+    assert zone_on_world_errors(ZONE, (11.088889, 11.088889)) == []
+
+
+def test_a_zone_against_the_walls_is_still_on_the_world() -> None:
+    """The walls are the edge of the world, so touching them is allowed."""
+    assert zone_on_world_errors((0.0, 11.088889, 0.0, 11.088889), (11.088889, 11.088889)) == []
+
+
+@pytest.mark.parametrize('zone', [
+    (-1.0, 1.0, 0.0, 1.0),
+    (0.0, 1.0, -1.0, 1.0),
+    (10.5, 12.0, 10.5, 12.0),
+    (0.0, 1.0, 10.5, 12.0),
+])
+def test_a_zone_off_the_world_is_rejected(zone: tuple[float, float, float, float]) -> None:
+    """A zone off the world maps to pixels off the canvas, where no turtle is."""
+    assert 'is not inside the world' in zone_on_world_errors(zone, (11.088889, 11.088889))[0]
+
+
+# ------------------------------------------------------------------ safe zone
+
+
+def test_the_default_safe_zone_configuration_is_accepted() -> None:
+    """Nothing about the shipped defaults is a problem."""
+    assert safe_zone_errors() == []
+
+
+@pytest.mark.parametrize('world', [(0.0, 11.088889), (-11.088889, 11.088889)])
+def test_a_non_positive_world_extent_is_rejected(
+    world: tuple[float, float],
+) -> None:
+    """Nothing maps to a pixel without a world, and the division by zero is worse."""
+    errors = safe_zone_errors(world_size=world)
+    assert 'world_width_m must be > 0' in errors[0]
+
+
+@pytest.mark.parametrize('canvas, expected', [
+    ((0.0, 500.0), 'canvas_width_px must be > 0'),
+    ((500.0, 0.0), 'canvas_height_px must be > 0'),
+    ((0.0, 0.0), 'canvas_width_px must be > 0'),
+])
+def test_a_non_positive_canvas_size_is_rejected(
+    canvas: tuple[float, float],
+    expected: str,
+) -> None:
+    """
+    The same reason, on the pixels: a canvas of no size cannot hold the marker.
+
+    Each case names the field that is wrong, rather than accepting either name:
+    the string is the whole error message an operator gets, so a message that
+    blames the width when the height is the zero one is a message that sends them
+    to the wrong parameter.
+    """
+    assert expected in safe_zone_errors(canvas_size_px=canvas)[0]
+
+
+def test_a_negative_canvas_margin_is_rejected() -> None:
+    """A margin shifts the canvas origin, so a negative one moves it off the window."""
+    assert 'canvas_margin_px must be >= 0' in safe_zone_errors(canvas_margin_px=-1.0)[0]
+
+
+def test_a_zero_track_period_is_rejected() -> None:
+    """
+    A zero period is not a period, it is a spin at the speed of the machine.
+
+    Re-raising the overlay is the mechanism for keeping it on top, so an
+    unbounded one is exactly the failure worth refusing.
+    """
+    assert 'track_period_s must be > 0' in safe_zone_errors(track_period_s=0.0)[0]
+
+
+def test_an_empty_window_title_is_rejected() -> None:
+    """Matching nothing finds nothing, and the overlay would wait forever."""
+    assert 'turtlesim_window_title must not be empty' in safe_zone_errors(
+        window_title='')[0]
+
+
+def test_an_empty_window_class_is_rejected() -> None:
+    """Same reason, and the class is what keeps two turtlesims distinguishable."""
+    assert 'turtlesim_window_class must not be empty' in safe_zone_errors(
+        window_class='')[0]
+
+
+def test_a_safe_zone_with_no_area_is_rejected() -> None:
+    """A zone with no area has no centre to place a marker on."""
+    assert 'start zone is empty' in safe_zone_errors(zone=(6.144, 4.944, 4.944, 6.144))[0]
+
+
+def test_a_safe_zone_off_the_world_is_rejected() -> None:
+    """The marker would be drawn where the canvas is not."""
+    assert 'is not inside the world' in safe_zone_errors(zone=(0.0, 20.0, 0.0, 20.0))[0]
+
+
+def test_an_empty_zone_is_not_also_reported_as_off_the_world() -> None:
+    """An inverted zone has no bounds to compare, so one error is the truth."""
+    errors = safe_zone_errors(zone=(6.144, 4.944, 6.144, 4.944))
+    assert len(errors) == 1
+    assert 'is empty' in errors[0]
+
+
+def test_every_safe_zone_problem_is_reported_not_just_the_first() -> None:
+    """The node raises the first, so the list has to be ordered, not deduplicated."""
+    errors = safe_zone_errors(
+        track_period_s=0.0, canvas_margin_px=-1.0, window_title='', window_class='')
+    assert len(errors) == 4
+    assert errors[0].startswith('canvas_margin_px')
+    assert errors[1].startswith('track_period_s')
+    assert errors[2].startswith('turtlesim_window_title')
+    assert errors[3].startswith('turtlesim_window_class')

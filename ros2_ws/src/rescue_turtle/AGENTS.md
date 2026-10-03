@@ -5,7 +5,7 @@ Rescue Turtle2: built on stock turtlesim (never modify turtlesim itself). Turtle
 
 ## Layout
 - Package: rescue_turtle (ament_python), depends on the installed turtlesim.
-- Nodes: spawner, rescue_manager (Version 1); rescuer (Version 2).
+- Nodes: spawner, rescue_manager (Version 1); safe_zone (Version 1.1); rescuer (Version 2).
 - Interfaces: /turtle1/pose, /turtle2/pose, /turtle1/cmd_vel, services /spawn, /clear, /turtle2/teleport_absolute; turtlesim params background_r/g/b.
 - Skills that apply: ros2, python-style, turtlesim.
 

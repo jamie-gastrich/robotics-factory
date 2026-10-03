@@ -34,6 +34,17 @@ Box = tuple[float, float, float, float]
 #: A point in the plane.
 Point = tuple[float, float]
 
+#: A rectangle in canvas pixels, as ``(x, y, width, height)``: Qt's own argument
+#: order, so it is what the overlay's painting wants. The values are floats and
+#: both ``QRect`` and ``setGeometry`` take ints, so a caller hands them to Qt
+#: rounded; :meth:`rescue_turtle.safe_zone.SafeZoneNode._place_overlay` does.
+#: Deliberately the same shape as :data:`Box` rather than a distinct type: the two
+#: are then interchangeable as far as mypy is concerned, so passing a metre box
+#: where pixels are wanted is a mistake a reader can see at the call site, and a
+#: separate type would have to be threaded through every caller to say the same
+#: thing more slowly.
+PixelRect = tuple[float, float, float, float]
+
 
 def distance(x1: float, y1: float, x2: float, y2: float) -> float:
     """Return the Euclidean distance between two points."""
@@ -68,6 +79,70 @@ def distance_to_zone(
     nearest_x = min(max(x, x_min), x_max)
     nearest_y = min(max(y, y_min), y_max)
     return math.hypot(x - nearest_x, y - nearest_y)
+
+
+def world_to_pixel(
+    x: float,
+    y: float,
+    *,
+    world_width_m: float,
+    world_height_m: float,
+    canvas_width_px: float,
+    canvas_height_px: float,
+) -> Point:
+    """
+    Return a world position as a pixel position on the canvas.
+
+    World y points up and screen y points down, so the row is measured down
+    from the top of the canvas. That flip is the whole reason this is a
+    function with a unit test on it rather than an expression written inline
+    where it cannot be checked.
+
+    Both the world extent and the canvas size must be positive; callers check
+    that in :mod:`rescue_turtle.validation` before any of this is called.
+    """
+    return (
+        x * canvas_width_px / world_width_m,
+        canvas_height_px - y * canvas_height_px / world_height_m,
+    )
+
+
+def zone_to_pixel_rect(
+    zone: Box,
+    *,
+    world_width_m: float,
+    world_height_m: float,
+    canvas_width_px: float,
+    canvas_height_px: float,
+) -> PixelRect:
+    """
+    Return the pixel rectangle a world zone occupies on the canvas.
+
+    The zone's top left corner in world terms is ``(x_min, y_max)``, because
+    world y is up, and that is the top left of the rectangle on screen. Width
+    and height then come out positive for any zone that is not inverted, which
+    Qt requires.
+
+    The two axes are mapped independently, so a canvas that is not square, or a
+    world that is not, is handled by passing its own extents rather than by
+    assuming one scale.
+    """
+    x_min, x_max, y_min, y_max = zone
+    left, top = world_to_pixel(
+        x_min, y_max,
+        world_width_m=world_width_m,
+        world_height_m=world_height_m,
+        canvas_width_px=canvas_width_px,
+        canvas_height_px=canvas_height_px,
+    )
+    right, bottom = world_to_pixel(
+        x_max, y_min,
+        world_width_m=world_width_m,
+        world_height_m=world_height_m,
+        canvas_width_px=canvas_width_px,
+        canvas_height_px=canvas_height_px,
+    )
+    return (left, top, right - left, bottom - top)
 
 
 def canvas_has_room(zone: Box, canvas: Box, min_distance: float) -> bool:
