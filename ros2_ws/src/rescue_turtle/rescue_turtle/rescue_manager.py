@@ -69,6 +69,16 @@ from .validation import manager_configuration_errors
 DEFAULT_ZONE_MIN = 4.944
 DEFAULT_ZONE_MAX = 6.144
 
+#: Start pose and spawn clearance, measured from a stock turtlesim.
+DEFAULT_START_X = 5.544444
+DEFAULT_START_Y = 5.544444
+DEFAULT_MIN_SPAWN_DISTANCE = 2.0
+
+#: Background colours. Aqua blue at rest, lime green while rescuing: the rescue
+#: is the good news, so it is not the colour a mistake looks like.
+DEFAULT_COLOR = (0, 200, 255)
+DEFAULT_RESCUE_COLOR = (0, 255, 0)
+
 #: Node holding the background parameters, and their names on it.
 DEFAULT_TURTLESIM_NODE = 'turtlesim'
 BACKGROUND_R = 'background_r'
@@ -125,8 +135,8 @@ class RescueManagerNode(Node):
         self._zone_y_min = self._declare_float('start_zone_y_min', DEFAULT_ZONE_MIN)
         self._zone_y_max = self._declare_float('start_zone_y_max', DEFAULT_ZONE_MAX)
 
-        self._rescue_color = self._declare_color('rescue_color', (255, 0, 0))
-        self._default_color = self._declare_color('default_color', (255, 255, 255))
+        self._rescue_color = self._declare_color('rescue_color', DEFAULT_RESCUE_COLOR)
+        self._default_color = self._declare_color('default_color', DEFAULT_COLOR)
         self._status_idle = self._declare_str('status_idle', 'idle')
         self._status_rescue = self._declare_str('status_rescue', 'rescue_started')
         self._status_complete = self._declare_str('status_complete', 'rescue_complete')
@@ -292,7 +302,8 @@ class RescueManagerNode(Node):
         self._state = RescueState.RESCUE
         self._rescue_started_at = time.monotonic()
         self._set_background(self._rescue_color, 'rescue')
-        self._call_clear()
+        #self._call_clear()
+        self._set_safety_zone()
         self._publish_status(self._status_rescue)
         self.get_logger().info(
             f'rescue started: the pair is {separation:.3f} m apart, inside the '

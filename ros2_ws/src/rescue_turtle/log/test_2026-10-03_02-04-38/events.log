@@ -1,0 +1,5 @@
+[0.000000] (-) TimerEvent: {}
+[0.000588] (rescue_turtle) JobQueued: {'identifier': 'rescue_turtle', 'dependencies': OrderedDict({'rescue_turtle': '/home/jamie/robotics-factory/ros2_ws/src/rescue_turtle/install/rescue_turtle'})}
+[0.000912] (rescue_turtle) JobStarted: {'identifier': 'rescue_turtle'}
+[0.005840] (rescue_turtle) JobEnded: {'identifier': 'rescue_turtle', 'rc': 1}
+[0.006834] (-) EventReactorShutdown: {}
