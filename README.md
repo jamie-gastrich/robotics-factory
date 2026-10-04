@@ -1,5 +1,7 @@
 # robotics-factory
 
+> **Status: paused.** I've stopped active work here to focus on [`mower-sim`](https://github.com/jamie-gastrich/mower-sim), a simulated autonomous mower. This repo is where I learned ROS 2 fundamentals, and it stays as a record of that work. The workflow also changed: here, agents did most of the typing while I approved. In `mower-sim`, I write the code myself, with agents acting as a professor and a reviewer.
+
 A ROS 2 workspace where I work out robot logic in simulation before it goes on
 hardware. Each project is a small, complete, verified thing rather than a
 tutorial fragment.
@@ -11,17 +13,17 @@ try to avoid, which is writing something that sounds like it works.
 ## What's here
 
 | Project | Version | State | What it is |
-| --- | --- | --- | --- |
-| [`rescue_turtle`](ros2_ws/src/rescue_turtle/README.md) | 1 done, 1.1 next | in progress | A turtlesim rescue game. You drive one turtle to a stranded one, and two nodes run the rules: attach, drag it home, score, respawn. |
-| [`first_robot`](ros2_ws/src/first_robot/) | 1 | done | The floor: a timer-driven publisher on `/heartbeat`, to prove the workspace, the build, and pub/sub mechanics. Closed as it stands; the specced subscriber was dropped rather than built. |
+|---|---|---|---|
+| [`rescue_turtle`](ros2_ws/src/rescue_turtle/README.md) | 1 done, 1.1 not started | paused | A turtlesim rescue game. You drive one turtle to a stranded one, and two nodes run the rules: attach, drag it home, score, respawn. |
+| [`first_robot`](ros2_ws/src/first_robot) | 1 | done | The floor: a timer-driven publisher on `/heartbeat`, to prove the workspace, the build, and pub/sub mechanics. Closed as it stands; the specced subscriber was dropped rather than built. |
 
 Neither project has been run on a robot. Both are simulation, deliberately, so
 the logic can be changed quickly and tested without hardware. The port to
-Gazebo is a separate project that has not started.
+Gazebo was never started here; that work now happens in `mower-sim`.
 
 ## Quick start
 
-```bash
+```
 cd ros2_ws
 source /opt/ros/lyrical/setup.bash      # ROS 2 'lyrical'
 colcon build
@@ -31,13 +33,12 @@ source install/setup.bash              # required in every new shell
 Run `rescue_turtle` in two terminals, each sourcing first. The launch file
 starts the turtlesim window itself, so do not start a second one:
 
-```bash
+```
 ros2 launch rescue_turtle rescue_turtle.launch.py            # 1: window + game
 ros2 run turtlesim turtle_teleop_key                         # 2: you drive
 ```
 
-Which one you start first does not matter — teleop publishes `/turtle1/cmd_vel`
-whether or not turtlesim is up yet, and turtlesim subscribes when it starts. Put
+Which one you start first does not matter — teleop publishes `/turtle1/cmd_vel` whether or not turtlesim is up yet, and turtlesim subscribes when it starts. Put
 the launch first anyway: otherwise keypresses before the window exists go
 nowhere and read as a broken teleop. `turtle_teleop_key` must run in a real
 terminal rather than in the background, since it puts the keyboard into raw
@@ -45,7 +46,7 @@ mode and aborts without a tty.
 
 Test everything:
 
-```bash
+```
 cd ros2_ws && source /opt/ros/lyrical/setup.bash
 colcon test && colcon test-result --verbose
 ```
@@ -68,15 +69,12 @@ never recovers.
 
 The geometric fix does not work. "Release once they separate" is a condition
 that is *already true* while holding, so it can never be what ends the hold. It
-also only ever fires by luck: separation is reachable at all only when
-`attach_distance` is smaller than the distance a fresh victim spawns at, and
-that is a legal parameter pair. Set `min_spawn_distance` below
-`attach_distance` and the game stops for good, with nothing in the log to
+also only ever fires by luck: separation is reachable at all only when `attach_distance` is smaller than the distance a fresh victim spawns at, and
+that is a legal parameter pair. Set `min_spawn_distance` below `attach_distance` and the game stops for good, with nothing in the log to
 explain it.
 
 What ships instead is a hold released by a predicate over the live victim pose
-versus the pose recorded at success. The new turtle is a *different* turtle at a
-*different* place, so that condition can only become true after the respawn. The
+versus the pose recorded at success. The new turtle is a *different* turtle at a *different* place, so that condition can only become true after the respawn. The
 decision is a pure function in `states.py`, so it is unit tested with no robot
 in the loop. The geometric version latched after one rescue; this one ran 30
 rescues in a row.
@@ -95,9 +93,11 @@ rescue_manager: releasing the post-success hold, the live victim is a different 
                 from the rescued one; attaching again from now on
 ```
 
-## How I work
+## How I worked here
 
-This is a deliberate part of the repo, not a wrapper around it.
+This describes how this repo was built. It is a deliberate part of the repo,
+not a wrapper around it. (`mower-sim` uses a different workflow: I write the
+code myself and agents teach and review.)
 
 **A plan gets written and approved before code exists.** Non-trivial work goes
 into `<project>/docs/spec.md` first. The `rescue_turtle` spec records the
@@ -111,8 +111,7 @@ that replaced it, which is the only reason I can still tell you why a piece of
 code looks the way it does.
 
 **Decisions carry their reasons.** Every non-obvious choice is written down with
-the alternative that was rejected and why. See
-[`docs/decisions.md`](docs/decisions.md) and the Decisions sections in each
+the alternative that was rejected and why. See [`docs/decisions.md`](docs/decisions.md) and the Decisions sections in each
 project's `progress.md`.
 
 **Logic is separated from ROS so it can be tested.** Name derivation, zone
@@ -124,13 +123,12 @@ wrapper touches ROS.
 a parameter. `grep -rn "turtle1\|turtle2" rescue_turtle/` returns nothing, and
 a second pair runs from the same binaries:
 
-```bash
+```
 ros2 launch rescue_turtle rescue_turtle.launch.py rescuer_name:=turtle2 victim_name:=turtle3
 ```
 
 That is not decoration. It is what makes the fleet version configuration instead
-of a rewrite, and it is the reason the design is scoped to a
-`(rescuer, victim)` *pair* rather than to a role: no field anywhere means "the
+of a rewrite, and it is the reason the design is scoped to a `(rescuer, victim)` *pair* rather than to a role: no field anywhere means "the
 rescuer", so two pairs on one machine cannot collide.
 
 **No check here involves looking at a screen.** Nothing automated inspects a
@@ -140,11 +138,10 @@ rescue runs and 255 otherwise. The one thing a machine cannot confirm is that
 the window *looks* right, so I drove it myself and watched the background go
 red on attach and white again on success.
 
-**Agents do the typing, I do the approving.** Coding is delegated to a
-subagent, a second one reviews the diff and runs the tests, and a third writes a
-plain-language lesson to `docs/lessons/`. The workflow is in
-[`AGENTS.md`](AGENTS.md). It has caught real bugs, and the constraint that every
-agent must read `progress.md` before touching anything is why decisions stay
+**Agents did the typing, I did the approving.** Coding was delegated to a
+subagent, a second one reviewed the diff and ran the tests, and a third wrote a
+plain-language lesson to `docs/lessons/`. The workflow is in [`AGENTS.md`](AGENTS.md). It caught real bugs, and the constraint that every
+agent must read `progress.md` before touching anything is why decisions stayed
 consistent across sessions.
 
 ## Layout
@@ -157,8 +154,7 @@ docs/decisions.md       department-wide decisions, append-only
 AGENTS.md               how work is planned, approved, delegated and committed
 ```
 
-`rescue_turtle` has the full set. `first_robot` has `AGENTS.md` and
-`docs/spec.md` + `docs/progress.md`; its README and lessons are not written
+`rescue_turtle` has the full set. `first_robot` has `AGENTS.md` and `docs/spec.md` + `docs/progress.md`; its README and lessons are not written
 yet, which is itself on the list below.
 
 ## Honest gaps
@@ -170,29 +166,24 @@ yet, which is itself on the list below.
   file.
 - **Simulation only.** No Gazebo, no hardware, no C++ yet.
 - **`first_robot` has no README or lesson.** `rescue_turtle` has both.
+- **Paused.** `rescue_turtle` 1.1 and later versions are not being worked on.
 
 ## Environment
 
 ROS 2 `lyrical` at `/opt/ros/lyrical`, Python 3.14, `ament_python` packages.
 
-```bash
+```
 cd ros2_ws && colcon build --symlink-install && source install/setup.bash
 ```
 
 Two things that cost me time and will cost you time if the docs do not say so:
 sourcing is required in *every* new shell or `ros2 run` reports
-"executable not found" even when the code is correct; and
-`pkill -f first_robot_node` hangs the shell, because `-f` matches the `pkill`
-command's own command line. Use a bracketed pattern:
-`pkill -f "first_robot[_]node"`.
+"executable not found" even when the code is correct; and `pkill -f first_robot_node` hangs the shell, because `-f` matches the `pkill` command's own command line. Use a bracketed pattern: `pkill -f "first_robot[_]node"`.
 
 ## Versions
 
-A version is a shipped state. Changes to what already shipped are numbered
-`1.1`, `1.2`, and so on, rather than inventing a new major version.
-`rescue_turtle` version 1 is shipped and verified; the changes I have in mind
+A version is a shipped state. Changes to what already shipped are numbered `1.1`, `1.2`, and so on, rather than inventing a new major version. `rescue_turtle` version 1 is shipped and verified; the changes I had in mind
 for it are 1.1, and that work has not started. `first_robot` is closed at 1.
 
-Roadmap, in order: `rescue_turtle` 1.1, then version 2 (an autonomous `rescuer`
-node: seek, grab, return on `cmd_vel`), then version 3 (several rescuers and a
-dispatcher).
+**Original roadmap (paused, kept for reference):** `rescue_turtle` 1.1, then version 2 (an autonomous `rescuer` node: seek, grab, return on `cmd_vel`), then version 3 (several rescuers and a
+dispatcher). Active robotics work continues in [`mower-sim`](https://github.com/jamie-gastrich/mower-sim).
