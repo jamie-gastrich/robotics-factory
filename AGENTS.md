@@ -16,6 +16,9 @@ ROS 2, C++, Python, Gazebo. Workspace: ros2_ws/. Each project lives in ros2_ws/s
   NOTE: none of these skill directories exist yet; don't assume a skill is
   available — check first and proceed without it if missing.
 - At the start of a session, read <project>/docs/progress.md before doing anything.
+- Never run turtle_teleop_key or any interactive program. The human does manual driving.
+- When a test uses a custom ROS_DOMAIN_ID, run `ros2 daemon stop` for that domain before finishing.
+- Before ending a task, run `ps -eo pid,cmd | grep -E "turtlesim|ros2|rescue" | grep -v grep` and kill anything you started.
 
 ## Environment
 - ROS 2 distro `lyrical` at /opt/ros/lyrical, Python 3.14.
